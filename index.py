@@ -4,11 +4,14 @@ import html
 import json
 import os
 import re
+import time
+import traceback
 import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
@@ -110,7 +113,7 @@ def tendance(texte: str) -> str:
     return "apaisement" if a > t else ("tension" if t else "neutre")
 
 
-def telecharger(url, timeout=20):
+def telecharger(url, timeout=8):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
@@ -164,8 +167,10 @@ def collecter_presse(mots, jours):
     mots_n = [norm(m) for m in mots]
     cles = {w for m in mots_n for w in m.split() if len(w) > 3}
     articles = []
-    for nom, url in requetes:
-        for e in lire_flux(url):
+    with ThreadPoolExecutor(max_workers=8) as pool:  # toutes les sources en même temps, pas l'une après l'autre
+        flux_lus = list(pool.map(lambda r: lire_flux(r[1]), requetes))
+    for (nom, url), entrees in zip(requetes, flux_lus):
+        for e in entrees:
             d = e["date"]
             if d and d < seuil:
                 continue
@@ -200,7 +205,7 @@ INSTANCES_MASTODON = ["mastodon.social", "piaille.fr", "mamot.fr", "framapiaf.or
 SUBREDDITS = ["france", "French", "actualite"]
 
 
-def http(url, headers=None, data=None, timeout=30):
+def http(url, headers=None, data=None, timeout=10):
     req = urllib.request.Request(url, data=data, headers={"User-Agent": UA, **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
@@ -219,20 +224,25 @@ def post(plateforme, date, texte, url, engagement):
             "hashtags": sorted({h.lower() for h in re.findall(r"#(\w+)", texte)}), "tendance": tendance(texte)}
 
 
-def collecter_mastodon(hashtags, seuil):
+def _mastodon_un(args):
+    inst, tag, seuil = args
     out = []
-    for inst in INSTANCES_MASTODON:
-        for tag in hashtags:
-            try:
-                for s in http(f"https://{inst}/api/v1/timelines/tag/{urllib.parse.quote(norm(tag))}?limit=40"):
-                    d = parse_iso(s["created_at"])
-                    if d < seuil or s.get("language") not in (None, "fr"):
-                        continue
-                    eng = s["reblogs_count"] + s["favourites_count"] + s["replies_count"]
-                    out.append(post("Mastodon", iso(d), nettoyer(s["content"]), s["url"], eng))
-            except Exception:
+    try:
+        for s in http(f"https://{inst}/api/v1/timelines/tag/{urllib.parse.quote(norm(tag))}?limit=40"):
+            d = parse_iso(s["created_at"])
+            if d < seuil or s.get("language") not in (None, "fr"):
                 continue
+            eng = s["reblogs_count"] + s["favourites_count"] + s["replies_count"]
+            out.append(post("Mastodon", iso(d), nettoyer(s["content"]), s["url"], eng))
+    except Exception:
+        pass
     return out
+
+
+def collecter_mastodon(hashtags, seuil):
+    taches = [(inst, tag, seuil) for inst in INSTANCES_MASTODON for tag in hashtags]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return [p for lot in pool.map(_mastodon_un, taches) for p in lot]
 
 
 def collecter_reddit(mots, seuil, jours):
@@ -247,20 +257,24 @@ def collecter_reddit(mots, seuil, jours):
     except Exception:
         pass
     periode = "day" if jours <= 1 else "week" if jours <= 7 else "month"
-    out = []
-    for sub in SUBREDDITS:
-        for m in mots:
-            try:
-                q = urllib.parse.urlencode({"q": m, "restrict_sr": 1, "sort": "new", "t": periode, "limit": 100})
-                for c in http(f"{base}/r/{sub}/search.json?{q}", hdr)["data"]["children"]:
-                    p = c["data"]
-                    d = datetime.fromtimestamp(p["created_utc"], timezone.utc)
-                    if d >= seuil:
-                        out.append(post("Reddit", iso(d), f'{p["title"]}. {p.get("selftext", "")}',
-                                        "https://www.reddit.com" + p["permalink"], p["score"] + p["num_comments"]))
-            except Exception:
-                continue
-    return out
+
+    def un(args):
+        sub, m = args
+        out = []
+        try:
+            q = urllib.parse.urlencode({"q": m, "restrict_sr": 1, "sort": "new", "t": periode, "limit": 100})
+            for c in http(f"{base}/r/{sub}/search.json?{q}", hdr)["data"]["children"]:
+                p = c["data"]
+                d = datetime.fromtimestamp(p["created_utc"], timezone.utc)
+                if d >= seuil:
+                    out.append(post("Reddit", iso(d), f'{p["title"]}. {p.get("selftext", "")}',
+                                    "https://www.reddit.com" + p["permalink"], p["score"] + p["num_comments"]))
+        except Exception:
+            pass
+        return out
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        return [p for lot in pool.map(un, [(sub, m) for sub in SUBREDDITS for m in mots]) for p in lot]
 
 
 def collecter_bluesky(mots, seuil):
@@ -311,6 +325,27 @@ def collecter_youtube(mots, seuil):
         except Exception:
             continue
     return out
+
+
+def diagnostic():
+    """Teste chaque source en parallèle (statut, durée, type d'erreur). Aucune clé n'est envoyée."""
+    cibles = [("Google Actualités", GOOGLE_NEWS.format(q="gr%C3%A8ve"))] + list(FLUX_DIRECTS.items())
+    cibles += [(f"Mastodon : {i}", f"https://{i}/api/v1/timelines/tag/greve?limit=1") for i in INSTANCES_MASTODON]
+    cibles += [("Reddit (accès public)", "https://www.reddit.com/r/france/search.json?q=gr%C3%A8ve&restrict_sr=1&limit=1")]
+
+    def test(c):
+        t = time.time()
+        try:
+            telecharger(c[1], timeout=8)
+            etat = "OK"
+        except urllib.error.HTTPError as e:
+            etat = f"refusé (HTTP {e.code})"
+        except Exception as e:
+            etat = f"échec ({type(e).__name__})"
+        return {"Source": c[0], "État": etat, "Durée (s)": round(time.time() - t, 1)}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return pd.DataFrame(list(pool.map(test, cibles)))
 
 
 # =============================================================================
@@ -641,6 +676,11 @@ interval = st.sidebar.slider("Fréquence (minutes)", 2, 30, 5, disabled=not live
 seuil_alerte = st.sidebar.slider("Alerte si tension ≥ (%)", 30, 100, 60)
 if st.sidebar.button("Actualiser maintenant"):
     st.cache_data.clear()
+with st.sidebar.expander("Diagnostic des sources"):
+    st.caption("Teste chaque source (presse, Mastodon, Reddit) depuis le serveur de l'application.")
+    if st.button("Lancer le diagnostic"):
+        with st.spinner("Test en cours…"):
+            st.dataframe(diagnostic(), hide_index=True)
 
 TTL = max(60, interval * 60 - 5) if live else 900
 
@@ -875,4 +915,9 @@ def dashboard():
             st.download_button("Télécharger la note", st.session_state["note"], "synthese.md")
 
 
-dashboard()
+try:
+    dashboard()
+except Exception as _e:
+    st.error(f"L'application a rencontré une erreur : {type(_e).__name__} : {_e}")
+    with st.expander("Détails techniques (à copier pour le support)"):
+        st.code(traceback.format_exc())
