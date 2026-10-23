@@ -1,173 +1,3 @@
-# ==========================================
-# FICHIER : README.md
-# ==========================================
-"""
-# Veille média France
-
-Collecte la presse française (Google Actualités + flux RSS) et les réseaux sociaux accessibles par API gratuite
-(Mastodon, Reddit, Bluesky, YouTube), classe les contenus (thèmes, acteurs, tendance) et les affiche dans un
-tableau de bord Streamlit. Une note de synthèse peut être rédigée par Claude (optionnel).
-
-## Collecte par agents IA
-
-Le mode par défaut du tableau de bord est **Agents IA (Claude)**. Au lieu d'exécuter des requêtes fixes, Claude pilote la collecte avec des outils (`collecter_presse`, `collecter_reseaux`, recherche web en option) :
-1. il lance une collecte large sur vos mots-clés ;
-2. il repère les acteurs, textes de loi et sujets émergents, puis relance des requêtes ciblées ;
-3. il croise les sources et rend des **signaux** structurés (type, niveau faible/moyen/fort, acteurs, échéance, pourquoi c'est important pour un arbitrage ou une position parlementaire, sources) dans l'onglet "Signaux (agent IA)".
-
-Le journal de l'agent (requêtes effectuées) est consultable pour auditer sa démarche. En ligne de commande :
-
-Points d'attention :
-- l'agent s'appuie uniquement sur ce que les outils renvoient, mais ses analyses peuvent comporter des erreurs : vérifiez les sources liées avant toute décision. Le mode "Scripts (sans IA)" reste disponible, gratuit.
-
-## Installation locale
-
-git clone https://github.com/<votre-compte>/veille-media-france.git
-cd veille-media-france
-python -m venv .venv && source .venv/bin/activate       # Windows : .venv\\Scripts\\activate
-pip install -r requirements.txt
-cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # puis renseignez les clés voulues
-streamlit run app.py
-
-## Clés API (toutes optionnelles, une source sans clé est ignorée)
-
-| Service | Variables | Où l'obtenir |
-|---|---|---|
-| Claude (note de synthèse) | `ANTHROPIC_API_KEY` | console Anthropic (facturation à l'usage) |
-| YouTube | `YOUTUBE_API_KEY` | Google Cloud, YouTube Data API v3 (quota gratuit) |
-| Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | reddit.com/prefs/apps (type « script ») |
-| Bluesky | `BSKY_HANDLE`, `BSKY_APP_PASSWORD` | Paramètres > Mots de passe d'application |
-| Mastodon | aucune | timelines publiques par hashtag |
-
-La presse ne demande aucune clé.
-
-## Déploiement en ligne (Streamlit Community Cloud)
-
-1. Poussez le dépôt sur GitHub (voir ci-dessous).
-2. Sur share.streamlit.io : *New app*, choisissez le dépôt, branche `main`, fichier `app.py`.
-3. *Advanced settings > Secrets* : collez le contenu de `.streamlit/secrets.toml.example` avec vos clés.
-4. Déployez. Ne commitez jamais `secrets.toml` ni `.env` (déjà dans `.gitignore`).
-
-## Mode temps réel
-
-Dans la barre latérale, activez **Temps réel** et choisissez une fréquence (2 à 30 minutes). Le tableau de bord se
-rafraîchit seul, sans recharger la page, et affiche :
-- l'heure de la dernière actualisation et une notification pour les **nouveaux contenus** (colonne « nouveau » dans les tableaux) ;
-- une **alerte** quand la part de contenus en tension dépasse le seuil réglé.
-
-Précisions sur le « temps réel » : c'est une interrogation périodique (polling) des flux RSS et des API, pas un flux
-continu. La presse via Google Actualités est en général décalée de quelques minutes à plusieurs dizaines de minutes.
-La recherche YouTube est limitée à une actualisation toutes les 30 minutes pour ménager le quota gratuit
-(10 000 unités par jour, 100 unités par recherche). Reddit et Bluesky appliquent aussi des limites de débit :
-évitez une fréquence inférieure à 5 minutes avec beaucoup de mots-clés.
-Sur Streamlit Community Cloud, une app inactive se met en veille : ce mode convient à un écran de suivi ouvert,
-pas à une surveillance 24 h/24. Pour cela, hébergez l'app sur un serveur permanent.
-
-## Publier sur Git
-
-git init
-git add .
-git commit -m "Veille média France : agents de collecte et tableau de bord"
-git branch -M main
-git remote add origin https://github.com/<votre-compte>/veille-media-france.git
-git push -u origin main
-
-## Utilisation en ligne de commande
-
-python -m veille.presse --mots "budget 2027" "49.3" --jours 3 --analyse
-python -m veille.social --mots "grève" --hashtags greve manifestation --jours 3
-
-Les fichiers sont écrits dans `veille_sortie/` et peuvent être chargés dans le tableau de bord (barre latérale).
-
-## Structure
-
-app.py              tableau de bord Streamlit
-veille/agent.py     agent IA (Claude) qui pilote la collecte et rend des signaux
-veille/presse.py    collecte presse, classification, note Claude
-veille/social.py    collecte Mastodon, Reddit, Bluesky, YouTube
-.streamlit/         thème et modèle de secrets
-
-## Limites et bonnes pratiques
-
-- X, Facebook, Instagram et TikTok n'ont pas d'API gratuite exploitable : non couverts.
-- Seuls titres, résumés et liens sont collectés (pas de contournement de paywall). Respectez les conditions des plateformes.
-- Aucun nom d'auteur n'est conservé pour les réseaux sociaux (RGPD).
-- La tonalité (tension / apaisement) est un comptage de mots-clés : un indicateur, pas une mesure d'opinion.
-- Les URL des flux RSS directs peuvent changer ; un flux en échec est ignoré.
-"""
-
-
-# ==========================================
-# FICHIER : requirements.txt
-# ==========================================
-"""
-streamlit>=1.50
-feedparser>=6.0
-anthropic>=0.60
-pandas>=2.0
-"""
-
-
-# ==========================================
-# FICHIER : .gitignore
-# ==========================================
-"""
-__pycache__/
-*.pyc
-.venv/
-.env
-.streamlit/secrets.toml
-veille_sortie/
-donnees/*
-!donnees/.gitkeep
-.DS_Store
-"""
-
-
-# ==========================================
-# FICHIER : .env.example
-# ==========================================
-"""
-# Copiez en .env (jamais commité) ou exportez ces variables. Toutes les clés sont optionnelles.
-ANTHROPIC_API_KEY=
-YOUTUBE_API_KEY=Key=AIzaSyBc_CM9lnUdTgIX7xoF8lZqpzvrt6z_wuM
-REDDIT_CLIENT_ID=
-REDDIT_CLIENT_SECRET=
-BSKY_HANDLE=
-BSKY_APP_PASSWORD=
-"""
-
-
-# ==========================================
-# FICHIER : .streamlit/config.toml
-# ==========================================
-"""
-[theme]
-primaryColor = "#1f4e8c"
-
-[server]
-headless = true
-"""
-
-
-# ==========================================
-# FICHIER : .streamlit/secrets.toml.example
-# ==========================================
-"""
-# Local : copiez en .streamlit/secrets.toml (ignoré par git)
-# Streamlit Community Cloud : collez ce contenu dans App settings > Secrets
-ANTHROPIC_API_KEY = ""
-YOUTUBE_API_KEY = "AIzaSyBc_CM9lnUdTgIX7xoF8lZqpzvrt6z_wuM"
-REDDIT_CLIENT_ID = ""
-REDDIT_CLIENT_SECRET = ""
-BSKY_HANDLE = ""
-BSKY_APP_PASSWORD = ""
-"""
-
-
-# ==========================================
-# FICHIER : app.py
-# ==========================================
 """Tableau de bord Streamlit : veille média et réseaux sociaux France."""
 import json
 import os
@@ -329,4 +159,121 @@ def dashboard():
             dfA = dfA[(dfA["titre"] + " " + dfA["resume"]).str.lower().str.contains(q, regex=False)]
     if not dfS.empty:
         if td:
-            dfS = dfS[dfS["tendance"].
+            dfS = dfS[dfS["tendance"].isin(td)]
+        if q:
+            dfS = dfS[dfS["texte"].str.lower().str.contains(q, regex=False)]
+        if th:  # les thèmes ne s'appliquent qu'à la presse
+            dfS = dfS.iloc[0:0]
+
+    # --- Indicateurs -----------------------------------------------------------------------
+    tout = pd.concat([dfA.get("tendance", pd.Series(dtype=str)), dfS.get("tendance", pd.Series(dtype=str))])
+    k = st.columns(5)
+    k[0].metric("Articles", len(dfA))
+    k[1].metric("Médias", dfA["source"].nunique() if not dfA.empty else 0)
+    k[2].metric("Publications sociales", len(dfS))
+    k[3].metric("En tension", f"{round(100 * (tout == 'tension').mean())} %" if len(tout) else "–")
+    k[4].metric("Engagement social", f"{int(dfS['engagement'].sum()):,}".replace(",", " ") if not dfS.empty else 0)
+
+    if len(tout) and 100 * (tout == "tension").mean() >= seuil_alerte:
+        st.warning(f"Alerte : {round(100 * (tout == 'tension').mean())} % des contenus sont en tension (seuil {seuil_alerte} %).")
+    if nouveaux:
+        st.info(f"{len(nouveaux)} nouveau(x) contenu(x) depuis la dernière actualisation.")
+
+    if dfA.empty and dfS.empty:
+        st.info("Aucune donnée. Vérifiez vos mots-clés ou votre connexion, ou chargez des fichiers JSON.")
+        return
+
+    t1, t5, t2, t3, t4 = st.tabs(["Vue d’ensemble", "Signaux (agent IA)", "Presse", "Réseaux sociaux", "Note de synthèse (Claude)"])
+
+    with t5:
+        if not signaux:
+            st.info("Les signaux sont produits par l'agent : choisissez le mode « Agents IA (Claude) » dans la barre latérale.")
+        else:
+            st.markdown(signaux.get("synthese", ""))
+            couleur = {"fort": "🔴", "moyen": "🟠", "faible": "🟢"}
+            ordre = {"fort": 0, "moyen": 1, "faible": 2}
+            tous = {**{a["id"]: a for a in arts}, **{p["id"]: p for p in posts}}
+            for sg in sorted(signaux.get("signaux", []), key=lambda x: ordre.get(x.get("niveau"), 3)):
+                with st.expander(f"{couleur.get(sg.get('niveau'), '⚪')} {sg['titre']} · {sg['type']}"):
+                    st.write(sg["resume"])
+                    st.markdown(f"**Pourquoi c’est important :** {sg['pourquoi_important']}")
+                    if sg.get("acteurs"):
+                        st.caption("Acteurs : " + ", ".join(sg["acteurs"]))
+                    if sg.get("echeance"):
+                        st.caption("Échéance : " + sg["echeance"])
+                    for i in sg.get("ids", []):
+                        if i in tous and tous[i].get("url", "#") != "#":
+                            st.markdown(f"- [{(tous[i].get('titre') or tous[i].get('texte', ''))[:110]}]({tous[i]['url']})")
+            if signaux.get("points_vigilance"):
+                st.subheader("Points de vigilance")
+                for v in signaux["points_vigilance"]:
+                    st.markdown(f"- {v}")
+            if signaux.get("lacunes"):
+                st.caption("Limites de la collecte : " + signaux["lacunes"])
+            st.download_button("Télécharger les signaux (JSON)",
+                               json.dumps(signaux, ensure_ascii=False, indent=2), "signaux.json")
+            with st.expander("Journal de l’agent (requêtes effectuées)"):
+                st.write("\n".join(f"- {j}" for j in journal))
+
+    with t1:
+        a, b = st.columns(2)
+        jour = pd.concat([
+            dfA.assign(type="Presse")[["date", "type"]] if not dfA.empty else pd.DataFrame(columns=["date", "type"]),
+            dfS.assign(type="Réseaux")[["date", "type"]] if not dfS.empty else pd.DataFrame(columns=["date", "type"]),
+        ])
+        jour["jour"] = pd.to_datetime(jour["date"], utc=True).dt.strftime("%Y-%m-%d")
+        a.subheader("Volume par jour")
+        a.bar_chart(jour.groupby(["jour", "type"]).size().unstack(fill_value=0))
+        b.subheader("Tendance")
+        b.bar_chart(tout.value_counts())
+        c, d = st.columns(2)
+        if not dfA.empty:
+            c.subheader("Thèmes (presse)")
+            c.bar_chart(dfA.explode("themes")["themes"].dropna().value_counts().head(10))
+            d.subheader("Acteurs cités (presse)")
+            d.bar_chart(dfA.explode("acteurs")["acteurs"].dropna().value_counts().head(10))
+        if not dfS.empty:
+            st.subheader("Hashtags dominants")
+            h = dfS.explode("hashtags")["hashtags"].dropna().value_counts().head(20)
+            st.write("  ".join(f"`#{t}` {n}" for t, n in h.items()) or "Aucun hashtag")
+
+    with t2:
+        if dfA.empty:
+            st.info("Aucun article.")
+        else:
+            v = dfA.sort_values("date", ascending=False)[["date", "source", "titre", "themes_txt", "acteurs_txt", "tendance", "nouveau", "url"]]
+            st.dataframe(v, hide_index=True, width="stretch", column_config={
+                "url": st.column_config.LinkColumn("Lien", display_text="ouvrir"),
+                "themes_txt": "Thèmes", "acteurs_txt": "Acteurs"})
+            st.download_button("Télécharger en CSV", v.to_csv(index=False, sep=";").encode("utf-8-sig"), "articles.csv")
+
+    with t3:
+        if dfS.empty:
+            st.info("Aucune publication (sources sans clé ignorées, voir README).")
+        else:
+            v = dfS.sort_values("engagement", ascending=False)[["date", "plateforme", "texte", "engagement", "tendance", "nouveau", "url"]]
+            st.dataframe(v, hide_index=True, width="stretch",
+                         column_config={"url": st.column_config.LinkColumn("Lien", display_text="ouvrir")})
+            st.download_button("Télécharger en CSV", v.to_csv(index=False, sep=";").encode("utf-8-sig"), "social.csv")
+
+    with t4:
+        st.write("Claude rédige une note d’analyse à partir des articles actuellement filtrés. "
+                 "Nécessite `ANTHROPIC_API_KEY` ; l’API est facturée à l’usage.")
+        if st.button("Générer la note"):
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                st.error("ANTHROPIC_API_KEY absente (voir README).")
+            elif dfA.empty:
+                st.warning("Aucun article à analyser.")
+            else:
+                with st.spinner("Analyse en cours…"):
+                    try:
+                        rows = dfA.assign(date=dfA["date"].astype(str)).to_dict("records")
+                        st.session_state["note"] = presse.synthese_claude(rows)
+                    except Exception as e:
+                        st.error(f"Erreur API : {e}")
+        if st.session_state.get("note"):
+            st.markdown(st.session_state["note"])
+            st.download_button("Télécharger la note", st.session_state["note"], "synthese.md")
+
+
+dashboard()
