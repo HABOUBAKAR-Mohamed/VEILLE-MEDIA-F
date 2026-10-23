@@ -13,7 +13,7 @@ tableau de bord Streamlit. Une note de synthèse peut être rédigée par Claude
 
 ## Collecte par agents IA
 
-Le mode par défaut du tableau de bord est **Agents IA (Claude)**. Au lieu d'exécuter des requêtes fixes, Claude pilote la collecte
+Le mode par défaut du tableau de bord est "Agents IA (Claude)". Au lieu d'exécuter des requêtes fixes, Claude pilote la collecte
 avec des outils (`collecter_presse`, `collecter_reseaux`, recherche web en option) :
 1. il lance une collecte large sur vos mots-clés ;
 2. il repère les acteurs, textes de loi et sujets émergents, puis relance des requêtes ciblées ;
