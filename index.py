@@ -7,9 +7,10 @@ import re
 import unicodedata
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
-import feedparser
 import pandas as pd
 import streamlit as st
 
@@ -85,11 +86,51 @@ def tendance(texte: str) -> str:
     return "apaisement" if a > t else ("tension" if t else "neutre")
 
 
-def date_entree(e):
-    for champ in ("published_parsed", "updated_parsed"):
-        if getattr(e, champ, None):
-            return datetime(*getattr(e, champ)[:6], tzinfo=timezone.utc)
-    return None
+def telecharger(url, timeout=20):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def _txt(el, nom):
+    x = el.find(nom)
+    return (x.text or "").strip() if x is not None and x.text else ""
+
+
+def _date(s):
+    if not s:
+        return None
+    try:
+        d = parsedate_to_datetime(s)
+    except Exception:
+        try:
+            d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return d.astimezone(timezone.utc)
+
+
+def lire_flux(url):
+    """Lit un flux RSS ou Atom (bibliothèque standard uniquement). Renvoie [] si le flux est indisponible."""
+    try:
+        racine = ET.fromstring(telecharger(url))
+    except Exception:
+        return []
+    out = []
+    for it in racine.iter("item"):
+        src = it.find("source")
+        out.append({"title": _txt(it, "title"), "link": _txt(it, "link"), "summary": _txt(it, "description"),
+                    "date": _date(_txt(it, "pubDate") or _txt(it, "{http://purl.org/dc/elements/1.1/}date")),
+                    "source": (src.text or "").strip() if src is not None and src.text else ""})
+    atom = "{http://www.w3.org/2005/Atom}"
+    for en in racine.iter(atom + "entry"):
+        lien = en.find(atom + "link")
+        out.append({"title": _txt(en, atom + "title"), "link": lien.get("href", "") if lien is not None else "",
+                    "summary": _txt(en, atom + "summary") or _txt(en, atom + "content"),
+                    "date": _date(_txt(en, atom + "published") or _txt(en, atom + "updated")), "source": ""})
+    return out
 
 
 def collecter_presse(mots, jours):
@@ -100,25 +141,21 @@ def collecter_presse(mots, jours):
     cles = {w for m in mots_n for w in m.split() if len(w) > 3}
     articles = []
     for nom, url in requetes:
-        try:
-            flux = feedparser.parse(url, agent=UA)
-        except Exception:
-            continue
-        for e in flux.entries:
-            d = date_entree(e)
+        for e in lire_flux(url):
+            d = e["date"]
             if d and d < seuil:
                 continue
-            titre = nettoyer(e.get("title", ""))
-            resume = nettoyer(e.get("summary", ""))
+            titre = nettoyer(e["title"])
+            resume = nettoyer(e["summary"])
             texte = norm(f"{titre} {resume}")
             if mots_n and not any(all(w in texte for w in m.split() if len(w) > 3) for m in mots_n):
                 continue
-            source = (e.get("source") or {}).get("title") or nom.split(" - ")[0]
+            source = e["source"] or nom.split(" - ")[0]
             if nom.startswith("Google") and " - " in titre:  # Google ajoute « - Média » au titre
                 titre, source = titre.rsplit(" - ", 1)
             articles.append({
                 "date": d.isoformat() if d else "", "source": source.strip(), "titre": titre,
-                "resume": resume[:400], "url": e.get("link", ""),
+                "resume": resume[:400], "url": e["link"],
                 "themes": tags(texte, THEMES), "acteurs": tags(f" {texte} ", ACTEURS),
                 "tendance": tendance(f"{titre} {resume}"),
                 "score": sum(texte.count(w) for w in cles),
