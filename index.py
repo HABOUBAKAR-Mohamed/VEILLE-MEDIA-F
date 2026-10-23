@@ -20,7 +20,10 @@ avec des outils (`collecter_presse`, `collecter_reseaux`, recherche web en optio
 2. il repère les acteurs, textes de loi et sujets émergents, puis relance des requêtes ciblées ;
 3. il croise les sources et rend des **signaux** structurés (type, niveau faible/moyen/fort, acteurs, échéance, pourquoi c'est
 """)
-   (important pour un arbitrage ou une position parlementaire, sources) dans l'onglet « Signaux (agent IA) ».
+   st.markdown("""
+Le texte de votre description...
+(important pour un arbitrage ou une position parlementaire, sources) dans l'onglet « Signaux (agent IA) ».
+""")
 
 Le journal de l'agent (requêtes effectuées) est consultable pour auditer sa démarche. En ligne de commande :
 `python -m veille.agent --mots "budget 2027" "49.3" --jours 3 [--web]`.
