@@ -293,7 +293,7 @@ def collecter_youtube(mots, seuil):
 # NOTE DE SYNTHÈSE (Claude, optionnel)
 # =============================================================================
 def synthese_claude(articles):
-    cle = os.environ.get("ANTHROPIC_API_KEY")
+    cle = os.environ.get("ANTHROPIC_API_KEY=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")
     if not cle:
         return ""
     corpus = "\n".join(f"- [{a['date'][:16]}] {a['source']} : {a['titre']} — {a['resume'][:200]}" for a in articles[:60])
