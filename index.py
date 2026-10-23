@@ -14,18 +14,13 @@ tableau de bord Streamlit. Une note de synthèse peut être rédigée par Claude
 ## Collecte par agents IA
 
 st.markdown("""
-Le mode par défaut du tableau de bord est **Agents IA (Claude)**. Au lieu d'exécuter des requêtes fixes, Claude pilote la collecte
-avec des outils (`collecter_presse`, `collecter_reseaux`, recherche web en option) :
+Le mode par défaut du tableau de bord est **Agents IA (Claude)**. Au lieu d'exécuter des requêtes fixes, Claude pilote la collecte avec des outils (`collecter_presse`, `collecter_reseaux`, recherche web en option) :
 1. il lance une collecte large sur vos mots-clés ;
 2. il repère les acteurs, textes de loi et sujets émergents, puis relance des requêtes ciblées ;
-3. il croise les sources et rend des **signaux** structurés (type, niveau faible/moyen/fort, acteurs, échéance, pourquoi c'est
-""")
-   st.markdown("""
-Le texte de votre description...
-(important pour un arbitrage ou une position parlementaire, sources) dans l'onglet « Signaux (agent IA) ».
-""")
+3. il croise les sources et rend des **signaux** structurés (type, niveau faible/moyen/fort, acteurs, échéance, pourquoi c'est important pour un arbitrage ou une position parlementaire, sources) dans l'onglet « Signaux (agent IA) ».
 
 Le journal de l'agent (requêtes effectuées) est consultable pour auditer sa démarche. En ligne de commande :
+""")
 `python -m veille.agent --mots "budget 2027" "49.3" --jours 3 [--web]`.
 
 Points d'attention :
