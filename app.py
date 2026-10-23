@@ -12,7 +12,7 @@ import streamlit as st
 import feedparser
 
 # Configuration de la page
-st.set_page_config(page_title="Veille média France", page_icon="📰", layout="wide")
+st.set_page_config(page_title="Veille média France", page_icon , layout="wide")
 
 # Gestion des secrets Streamlit
 for _k in ("ANTHROPIC_API_KEY", "YOUTUBE_API_KEY", "REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET",
