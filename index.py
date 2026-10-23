@@ -35,6 +35,7 @@ cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # puis renseignez l
 streamlit run app.py
 ```
 
+st.markdown("""
 ## Clés API (toutes optionnelles, une source sans clé est ignorée)
 
 | Service | Variables | Où l'obtenir |
@@ -44,6 +45,7 @@ streamlit run app.py
 | Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | reddit.com/prefs/apps (type « script ») |
 | Bluesky | `BSKY_HANDLE`, `BSKY_APP_PASSWORD` | Paramètres > Mots de passe d'application |
 | Mastodon | aucune | timelines publiques par hashtag |
+""")
 
 La presse ne demande aucune clé.
 
